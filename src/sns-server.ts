@@ -298,7 +298,9 @@ export class SNSServer implements ISNSServer {
     const sqsEndpoint = `${subEndpointUrl.protocol}//${subEndpointUrl.host}/`;
     const sqs = new SQS({ endpoint: sqsEndpoint, region: this.region });
 
-    if (sub["Attributes"]["RawMessageDelivery"] === "true") {
+    // No parsing if raw message delivery or local SQS-SNS subscriptions
+    // https://docs.aws.amazon.com/sns/latest/dg/sns-sqs-as-subscriber.html
+    if (sub["Attributes"]["RawMessageDelivery"] === "true" || JSON.parse(event).Records === undefined) {
       return sqs
         .sendMessage({
           QueueUrl: sub.Endpoint,
@@ -362,13 +364,16 @@ export class SNSServer implements ISNSServer {
           }
           this.debug("event: " + event);
           if (!sub.Protocol) {
+            this.debug("No protocol defined, falling back to HTTP...")
             sub.Protocol = "http";
           }
           const protocol = sub.Protocol.toLowerCase();
           if (protocol === "http") {
+            this.debug("Calling publishHttp....")
             return this.publishHttp(event, sub, isRaw);
           }
           if (protocol === "sqs") {
+            this.debug("Calling publishSqs....")
             return this.publishSqs(event, sub, messageAttributes);
           }
           throw new Error(

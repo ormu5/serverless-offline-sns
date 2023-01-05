@@ -31,6 +31,8 @@ class ServerlessOfflineSns {
   private region: string;
   private accountId: string;
   private servicesDirectory: string;
+  private offlineSqsPort: number;
+  private offlineSqsAccountId: string;
 
   constructor(serverless: any, options: any) {
     this.app = express();
@@ -89,10 +91,17 @@ class ServerlessOfflineSns {
       process.env
     );
     this.config =
-      this.serverless.service.custom["serverless-offline-sns"] || {};
+      this.serverless.service.custom["serverless-offline-sns"] || {}
+    // Any SQS subscriptions found during scanning of resources will be appended
+    if (typeof this.config.subscriptions === 'undefined') {
+        this.config.subscriptions = [];
+    }
     this.localPort = this.config.port || this.config.localPort || 4002;
     this.remotePort = this.config.port || this.config.remotePort || 4002;
     this.accountId = this.config.accountId || "123456789012";
+    // Standard serverless-offline-sqs values if not configured
+    this.offlineSqsPort = this.config.offlineSqsPort || 9324;
+    this.offlineSqsAccountId = this.config.offlineSqsAccountId || "000000000000";
     const offlineConfig =
       this.serverless.service.custom["serverless-offline"] || {};
     this.servicesDirectory = this.config.servicesDirectory || "";
@@ -186,6 +195,8 @@ class ServerlessOfflineSns {
       const topicArn = get(["Properties", "TopicArn", "Ref"], value);
       const topicName = get(["Properties", "TopicName"], resources[topicArn]);
       const fnName = this.getFunctionName(resourceName);
+      // Also pass queue name to support SQS-SNS subscriptions
+      const queueName = get(["Properties", "QueueName"], resources[resourceName]);
       subscriptions.push({
         fnName,
         options: {
@@ -193,6 +204,7 @@ class ServerlessOfflineSns {
           protocol,
           rawMessageDelivery,
           filterPolicy,
+          queueName,
         },
       });
     });
@@ -271,6 +283,18 @@ class ServerlessOfflineSns {
     );
   }
   private async subscribeFromResource(subscription, location) {
+
+    // Catch/address SQS-SNS subscriptions, add to array of SQS-SNS subscriptions
+    if (subscription.options.protocol === 'sqs') {
+        this.config.subscriptions.push({
+            topic: subscription.options.topicName,
+            queue: `http://localhost:${this.offlineSqsPort}/${this.offlineSqsAccountId}/${subscription.options.queueName}`
+        });
+        // Skip subscribe() in anticipation of subscribeQueue() later in flow
+        return;
+    }
+
+    // Assume Lambda-SNS subscription; i.e., subscribe().
     this.debug("subscribe: " + subscription.fnName);
     this.log(
       `Creating topic: "${subscription.options.topicName}" for fn "${subscription.fnName}"`
@@ -279,6 +303,7 @@ class ServerlessOfflineSns {
       subscription.options.topicName
     );
     this.debug("topic: " + JSON.stringify(data));
+
     const fn = this.serverless.service.functions[subscription.fnName];
     await this.snsAdapter.subscribe(
       fn,

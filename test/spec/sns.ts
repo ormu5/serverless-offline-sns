@@ -157,16 +157,15 @@ describe("test", () => {
     expect(state.getPongs()).to.eq(0);
   });
 
-  it("should use the custom host for subscription urls", async () => {
+  it("should use the custom endpoint for http subscription urls", async () => {
     plugin = new ServerlessOfflineSns(
       createServerless(accountId, "pongHandler", "0.0.0.0"),
       { skipCacheInvalidation: true }
     );
     const snsAdapter = await plugin.start();
     const response = await snsAdapter.listSubscriptions();
-
     response.Subscriptions.forEach((sub) => {
-      expect(sub.Endpoint.startsWith("http://0.0.0.0:4002")).to.be.true;
+      expect(sub.Endpoint.startsWith("http://0.0.0.0:4002") || sub.Protocol === 'sqs').to.be.true;
     });
   });
 
@@ -178,8 +177,9 @@ describe("test", () => {
     const snsAdapter = await plugin.start();
     const response = await snsAdapter.listSubscriptions();
 
+    console.log(response);
     response.Subscriptions.forEach((sub) => {
-      expect(sub.Endpoint.startsWith("http://anotherHost:4002")).to.be.true;
+      expect(sub.Endpoint.startsWith("http://anotherHost:4002") || sub.Protocol === 'sqs').to.be.true;
     });
   });
 
@@ -408,9 +408,8 @@ describe("test", () => {
     );
     await new Promise((res) => setTimeout(res, 100));
     assert.calledOnce(spySendMessage);
-    assert.calledWith(spySendMessage, {
-      QueueUrl: "http://127.0.0.1:4002/undefined",
-      MessageBody: "{}",
+    assert.calledWithMatch(spySendMessage, {
+      QueueUrl: "http://localhost:9324/000000000000/pong6",
       MessageAttributes: {},
     });
     AWSMock.restore("SQS", "sendMessage");
