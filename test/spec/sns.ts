@@ -177,7 +177,6 @@ describe("test", () => {
     const snsAdapter = await plugin.start();
     const response = await snsAdapter.listSubscriptions();
 
-    console.log(response);
     response.Subscriptions.forEach((sub) => {
       expect(sub.Endpoint.startsWith("http://anotherHost:4002") || sub.Protocol === 'sqs').to.be.true;
     });
