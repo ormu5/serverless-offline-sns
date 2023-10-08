@@ -447,7 +447,8 @@ class ServerlessOfflineSns {
       process.stderr.on("data", (data) => {
         error = true;
         console.warn("error", data);
-        context.fail(data);
+        // Disabling fatal exit for now
+        // context.fail(data);
       });
 
       process.on("close", (code) => {
